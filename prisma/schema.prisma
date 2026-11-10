@@ -1,0 +1,190 @@
+// ShadowSpark Fleet — enterprise & bulk logistics data model.
+// PostgreSQL (Neon-compatible). `DATABASE_URL` is required only to run
+// generate/migrate/seed; the Next.js build never connects to a database.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Vehicle {
+  id           String   @id
+  make         String
+  model        String
+  type         VehicleType
+  plate        String   @unique
+  capacityKg   Float    @default(0)
+  pallets      Int      @default(0)
+  refrigerated Boolean  @default(false)
+  status       VehicleStatus @default(active)
+  city         String
+  lastSeenAt   DateTime @default(now())
+  driverId     String?  @unique
+  driver       Driver?  @relation(fields: [driverId], references: [id])
+  routes       Route[]
+}
+
+enum VehicleType {
+  truck
+  van
+  refrigerated
+}
+
+enum VehicleStatus {
+  active
+  en_route
+  maintenance
+  offline
+}
+
+model Driver {
+  id       String    @id
+  name     String
+  phone    String
+  license  String?
+  rating   Float     @default(0)
+  trips    Int       @default(0)
+  status   DriverStatus @default(available)
+  city     String
+  vehicle  Vehicle?
+  shipments Shipment[]
+  routes   Route[]
+}
+
+enum DriverStatus {
+  available
+  on_trip
+  off_duty
+}
+
+model Warehouse {
+  id       String  @id
+  name     String
+  city     String
+  address  String
+  capacityPallets Int @default(0)
+  shipments Shipment[]
+}
+
+model Client {
+  id        String     @id
+  name      String
+  industry  String?
+  city      String?
+  monogram  String
+  shipments Shipment[]
+  routes    Route[]
+}
+
+model Shipment {
+  id           String         @id
+  ref          String         @unique
+  clientId     String
+  client       Client         @relation(fields: [clientId], references: [id])
+  routeId      String?
+  route        Route?         @relation(fields: [routeId], references: [id])
+  originCity   String
+  destCity     String
+  origin       String
+  destination  String
+  weightKg     Float
+  pallets      Int            @default(0)
+  valueNgn     Float
+  costNgn      Float
+  status       ShipmentStatus @default(pending)
+  failureReason String?
+  coldChain    Boolean        @default(false)
+  tempC        Float?
+  createdOn    DateTime       @default(now())
+  etaMinutes   Int            @default(0)
+  warehouseId  String?
+  warehouse    Warehouse?     @relation(fields: [warehouseId], references: [id])
+  driverId     String?
+  driver       Driver?        @relation(fields: [driverId], references: [id])
+  stops        Stop[]
+
+  @@index([clientId])
+  @@index([routeId])
+  @@index([status])
+}
+
+enum ShipmentStatus {
+  pending
+  scheduled
+  in_transit
+  delivered
+  failed
+  returned
+  cancelled
+}
+
+model Route {
+  id       String  @id
+  name     String
+  corridor String
+  date     String
+  status   RouteStatus @default(planned)
+  vehicleId String?
+  vehicle  Vehicle? @relation(fields: [vehicleId], references: [id])
+  driverId String?
+  driver   Driver?  @relation(fields: [driverId], references: [id])
+  clientId String?
+  client   Client?  @relation(fields: [clientId], references: [id])
+  stops    Stop[]
+  shipments Shipment[]
+}
+
+enum RouteStatus {
+  planned
+  optimized
+  in_progress
+  dispatched
+  completed
+  cancelled
+}
+
+model Stop {
+  id           String  @id
+  routeId      String
+  route        Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  sequence     Int
+  shipmentRef  String?
+  shipment     Shipment? @relation(fields: [shipmentRef], references: [ref])
+  city         String
+  address      String
+  lat          Float
+  lng          Float
+  windowStart  String?
+  windowEnd    String?
+
+  @@index([routeId])
+}
+
+model Alert {
+  id        String     @id
+  level     AlertLevel @default(info)
+  title     String
+  message   String
+  time      String
+  entityRef String?
+
+  @@index([level])
+}
+
+enum AlertLevel {
+  info
+  warning
+  critical
+}
+
+model Report {
+  id       String  @id
+  title    String
+  period   String
+  summary  String
+  dataJson String  @default("{}")
+}
